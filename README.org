@@ -1,0 +1,138 @@
+#+TITLE:     Zjson - A reference Common Lisp JSON [en|de]coding library
+#+AUTHOR:    Johnny Ruiz
+#+EMAIL:     jeko2000@yandex.com
+#+DESCRIPTION: A reference Common Lisp JSON [en|de]coding library
+#+LANGUAGE:  en
+#+OPTIONS:   H:4 num:nil toc:2 p:t
+
+** Introduction
+[[https://www.json.org/json-en.html][JSON]] is a language-independent data interchange format.
+
+Zjson provides functionality to
+  1) encode Lisp objects to JSON
+  2) decode JSON into Lisp objects
+
+Zjson has been tested in the following CL implementations:
+ + [X] [[http://www.sbcl.org][SBCL]]
+
+** Features
+ + embraces [[https://lispcookbook.github.io/cl-cookbook/clos.html][CLOS]], the Common Lisp Object System, allowing its behavior
+   to be extended/customized when needed
+ + aims to be fully compliant with [[https://tools.ietf.org/html/rfc7159][RFC-7159]]
+ + provides an abstract =jso= class representing a JSON object
+   together with implementations for alists and hash tables
+ + allows for lossless encoding and decoding of JSON by having
+   explicit =*true*=, =*false*=, and =*null*= variables defaulting to
+   :true, :false, and :null, respectively
+ + implements a JSON pretty-printer
+
+** Requirements
+To use this library, you need [[https://common-lisp.net/project/asdf/][ASDF]] version 3.1 or later, which you can
+query via =asdf:asdf-version=.
+#+begin_src common-lisp
+(asdf:asdf-version)
+;; "3.3.4.1"
+#+end_src
+
+** Usage Recipes
+*** How do I load the library
+First, clone the repo to a location where [[https://common-lisp.net/project/asdf/][ASDF]] can find it (e.g.,
+=~/common-lisp/=).
+#+begin_src bash
+cd ~/common-lisp
+git clone https://github.com/jeko2000/zjson.git
+#+end_src
+
+Then, load via the usual =asdf:load-system= mechanism.
+#+begin_src bash
+(asdf:load-system "zjson")
+#+end_src
+
+Optionally, you can use [[https://common-lisp.net/project/asdf/][ASDF]] to run the unit test suite via the following:
+#+begin_src bash
+(asdf:test-system "zjson")
+#+end_src
+
+
+*** How do I choose my desired =jso= implementation?
+Simply bind =zjson:*jso-implementation*= to a symbol of your desired
+implementation class.
+
+Out of the box, the following implementations are available:
+ + alist-impl :: This is the default value and likely a good choice
+   for most use cases.
+ + hash-impl :: Use this if you expect particularly large JSON Objects.
+
+#+begin_src common-lisp
+(let* ((zjson:*jso-implementation* 'zjson:hash-impl)
+                (jso (zjson:make-jso)))
+           (dotimes (i 1000)
+             (setf (zjson:jso-get jso (format nil "key~d" i)) i))
+           (list jso (zjson:jso-count jso)))
+
+;; => (#<ZJSON:HASH-IMPL {1003EC17B3}> 1000)
+#+end_src
+
+*** How do I create a new JSON object?
+JSON objects are created via =make-jso= function.
+
+In cases where the contents of the new JSON object are known, these
+can be passed to =make-jso= alternating between keys and values.
+#+begin_src common-lisp
+(let ((jso1 (zjson:make-jso))
+      (jso2 (zjson:make-jso "key1" :true "key2" 12.25)))
+  (list (zjson:jso-null jso1) (zjson:encode-to-string jso2)))
+
+;; => (T "{\"key2\":12.25,\"key1\":true}")
+#+end_src
+
+*** How do I get information about an existing JSON object?
+The following methods are available to query the state of a JSON object:
+ + =jso-count= :: Return the number of entries in the JSON object
+ + =jso-null= :: Returns t if the JSON object has zero entries
+ + =jso-keys= :: Returns a list of all keys in the JSON object
+ + =jso-values= :: Returns a list of all values in the JSON object
+#+begin_src common-lisp
+(let ((jso (zjson:make-jso "key1" "value1" "key2" 2.12 "key3" '(:true :false))))
+  (list (zjson:jso-count jso)
+        (zjson:jso-null jso)
+        (zjson:jso-keys jso)
+        (zjson:jso-values jso)))
+
+;; => (3 NIL ("key3" "key2" "key1") ((:TRUE :FALSE) 2.12 "value1"))
+#+end_src
+
+*** How do I get and set JSON object values?
+Getting and setting is handled by the setf-able =jso-get= method.
+#+begin_src common-lisp
+(let ((jso (zjson:make-jso)))
+  (list
+   (zjson:jso-get jso "key" "default")
+   (progn (setf (zjson:jso-get jso "key") "value")
+          (zjson:jso-get jso "key" "default"))))
+
+;; => ("default" "value")
+#+end_src
+
+*** How do I loop over all entries in a JSON object for side-effects?
+Use the =jso-map= method which accepts a two-parameter function designator and a jso object.
+#+begin_src common-lisp
+(zjson:jso-map (lambda (key value) (format t "Key: ~s, value: ~d~%" key value))
+               (zjson:make-jso "id" 142 "year" 1987))
+
+;; Key: "year", value: 1987
+;; Key: "id", value: 142
+#+end_src
+
+*** How do I encode and decode JSON values?
+When dealing with character streams use =encode= and =decode=.
+For strings use =encode-to-string= and =decode-from-string= instead.
+#+begin_src common-lisp
+(list
+ (zjson:encode-to-string (zjson:make-jso "testing?" :true))
+ (zjson:decode-from-string
+  "[true,false,\"true\",\"false\",\"12.24\",12.24,[\"inside\"],{\"key1\":\"value1\",\"key2\":\"value2\",\"key3\":\"value3\"},0,\"-1\"]"))
+
+;; ("{\"testing?\":true}"
+;;  (:TRUE :FALSE "true" "false" "12.24" 12.24 ("inside") #<ZJSON:ALIST-IMPL {1001AFF0A3}> 0 "-1"))
+#+end_src
